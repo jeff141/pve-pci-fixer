@@ -1,4 +1,4 @@
-mode: "dev"          #可选 "dev" 或 "prod"
+mode: "prod"          #可选 "dev" 或 "prod"
 enable_web: true
 targets:
   - vmid: 100

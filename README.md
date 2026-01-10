@@ -2,19 +2,18 @@
 
 [English](./README_EN.md) | 中文说明
 
-**作者：一坨肉**
+**作者：一坨肉 (yiTuoRou)**
 
-这是一个为 PVE (Proxmox VE) 用户设计的自动化工具，专门解决由于增加/减少硬件（如 OCulink 设备、外置显卡）导致的 PCI 地址（BDF）变动，从而引起虚拟机无法启动的问题。
+这是一个为 PVE (Proxmox VE) 用户设计的自动化工具，专门解决由于增加/减少硬件（如 OCulink 设备、外置显卡、NVMe 硬盘）导致的 PCI 地址（BDF）变动，从而引起虚拟机无法启动或直通失效的问题。
 
 ### 核心功能
-- ✅ **自动追踪**：基于设备名称关键字识别硬件，彻底告别固定地址绑定。
-- ✅ **Web 界面**：傻瓜式点选虚拟机和 PCI 设备，自动生成配置，无需手动编辑 YAML。
-- ✅ **开机自启**：支持作为 Systemd 服务运行，开机自动对齐所有变动的 BDF 地址。
-- ✅ **轻量无依赖**：采用 Rust 编写，编译后为单个二进制文件，不污染宿主机系统。
+- ✅ **自动追踪**：基于设备名称关键字识别硬件，彻底告变 BDF 地址漂移困扰。
+- ✅ **Web 界面**：响应式管理后台，傻瓜式点选虚拟机与硬件，一键完成绑定。
+- ✅ **开机自愈**：集成 Systemd 服务，宿主机开机瞬间自动对齐所有 VM 配置。
+- ✅ **规范化补全**：自动处理 `0000:` 前缀，严格遵循 Proxmox PCI 分配规范。
+- ✅ **轻量安全**：Rust 编写，单文件运行，不修改系统底层，仅修正 `.conf` 文本。
 
-### 如何使用
-1. 从 [Releases](../../releases) 下载对应架构的二进制文件。
-2. 赋予执行权限并运行：`chmod +x pve-pci-fixer && ./pve-pci-fixer`。
-3. 访问 `http://<PVE-IP>:3000` 进入管理后台进行设备绑定。
-
----
+### 快速安装 (推荐)
+在 PVE 终端执行以下命令，即可全自动完成下载、安装、配置服务及开机自启：
+```bash
+curl -sSL [https://raw.githubusercontent.com/jeff141/pve-pci-fixer/master/install.sh](https://raw.githubusercontent.com/jeff141/pve-pci-fixer/master/install.sh) | bash
