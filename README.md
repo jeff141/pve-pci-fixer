@@ -16,4 +16,4 @@
 ### 快速安装 (推荐)
 在 PVE 终端执行以下命令，即可全自动完成下载、安装、配置服务及开机自启：
 ```bash
- curl -sSL https://raw.githubusercontent.com/jeff141/pve-pci-fixer/master/install.sh | bash 
+ curl -sSL https://gitee.com/JeffStudio/pve-pci-fixer/raw/master/install.sh | bash 
