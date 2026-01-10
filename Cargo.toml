@@ -1,0 +1,22 @@
+[package]
+name = "pve-pci-fixer"
+version = "0.1.0"
+authors = ["一坨肉 <your_email@example.com>"]
+edition = "2024"
+description = "一个自动修复 PVE 虚拟机 PCI 硬件地址漂移的工具"
+
+[dependencies]
+# 核心序列化框架
+serde = { version = "1.0", features = ["derive"] }
+# 处理 config.yml
+serde_yaml = "0.9"
+# 处理 JSON (Web API 交互)
+serde_json = "1.0"
+# 正则表达式匹配 .conf 文件
+regex = "1.10"
+# Web 服务器框架
+axum = "0.7"
+# 异步运行时 (Java 工程师的 Netty/Event Loop)
+tokio = { version = "1.0", features = ["full"] }
+# Web 辅助功能
+tower-http = { version = "0.5", features = ["fs"] }

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>PVE PCI Fixer</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; background: #f4f7f6; color: #2d3436; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        select, input, button { padding: 12px; margin: 8px 0; width: 100%; box-sizing: border-box; border: 1px solid #dfe6e9; border-radius: 4px; font-size: 14px; }
+        button { background: #2ecc71; color: white; border: none; cursor: pointer; font-weight: bold; transition: background 0.3s; }
+        button:hover { background: #27ae60; }
+        .log-area { background: #2d3436; color: #dfe6e9; padding: 15px; border-radius: 4px; white-space: pre-wrap; font-family: 'Courier New', monospace; min-height: 80px; font-size: 13px; }
+        label { font-weight: bold; font-size: 0.85em; color: #636e72; text-transform: uppercase; }
+        h1 { color: #2d3436; border-left: 5px solid #3498db; padding-left: 15px; }
+
+        /* 页脚样式 */
+        footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #dfe6e9; text-align: center; font-size: 14px; color: #b2bec3; }
+        footer a { color: #3498db; text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        .author-tag { color: #636e72; font-weight: bold; }
+    </style>
+</head>
+<body>
+<h1>PvePciFixer 管理面板</h1>
+
+<div class="card">
+    <h3>1. 快速绑定设备</h3>
+    <p style="font-size: 0.9em; color: #7f8c8d;">选择一个虚拟机及其对应的物理硬件，系统将自动跟踪硬件地址变动。</p>
+
+    <label>选择虚拟机：</label>
+    <select id="vms">
+        <option>正在获取 VM 列表...</option>
+    </select>
+
+    <label>选择物理 PCI 设备 (作为识别关键字)：</label>
+    <select id="pcis">
+        <option>正在获取 PCI 列表...</option>
+    </select>
+
+    <label>目标槽位 (PVE Config Key)：</label>
+    <input type="text" id="slot_key" placeholder="例如: hostpci0" value="hostpci0">
+
+    <button onclick="saveBind()">确认并保存绑定关系</button>
+</div>
+
+<div class="card">
+    <h3>2. 系统状态与操作</h3>
+    <button onclick="runFix()" style="background: #3498db;">立即执行全量地址修正</button>
+    <h4>实时运行日志：</h4>
+    <div id="logs" class="log-area">等待指令下达...</div>
+</div>
+
+<footer>
+    <p>
+        <span class="author-tag">作者：一坨肉</span> |
+        开源地址：<a href="https://github.com/jeff141/pve-pci-fixer" target="_blank">View on GitHub</a>
+    </p>
+    <p style="font-size: 0.8em;">&copy; 2026 PvePciFixer Project. 基于爱发电开源.</p>
+</footer>
+
+<script>
+    async function loadData() {
+        try {
+            const [vms, pcis] = await Promise.all([
+                fetch('/api/vms').then(r => r.json()),
+                fetch('/api/pci').then(r => r.json())
+            ]);
+
+            document.getElementById('vms').innerHTML = vms.map(v =>
+                `<option value="${v.vmid}">${v.vmid} | ${v.name}</option>`).join('');
+
+            // p[0] 是地址, p[1] 是设备全名
+            document.getElementById('pcis').innerHTML = pcis.map(p =>
+                `<option value="${p[1]}">${p[0]} - ${p[1]}</option>`).join('');
+        } catch (err) {
+            document.getElementById('logs').innerText = "通信失败：无法连接到 Rust 后端 API";
+            console.error(err);
+        }
+    }
+
+    async function saveBind() {
+        const data = {
+            vmid: parseInt(document.getElementById('vms').value),
+            name_keyword: document.getElementById('pcis').value,
+            key: document.getElementById('slot_key').value,
+            pci_addr: "" // 暂不传具体地址，后端会根据关键字查找
+        };
+
+        try {
+            const res = await fetch('/api/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            }).then(r => r.text());
+
+            document.getElementById('logs').innerText = res;
+            runFix(); // 保存后自动扫描
+        } catch (err) {
+            alert("API 请求失败，请检查网络");
+        }
+    }
+
+    async function runFix() {
+        document.getElementById('logs').innerText = ">>> 正在扫描 PCI 总线并对比虚拟机配置...";
+        try {
+            const res = await fetch('/api/fix').then(r => r.text());
+            document.getElementById('logs').innerText = res;
+        } catch (err) {
+            document.getElementById('logs').innerText = "执行失败：后端服务响应异常";
+        }
+    }
+
+    window.onload = loadData;
+</script>
+</body>
+</html>
