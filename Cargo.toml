@@ -1,7 +1,7 @@
 [package]
 name = "pve-pci-fixer"
 version = "0.1.0"
-authors = ["一坨肉 <your_email@example.com>"]
+authors = ["一坨肉 <1561074588@qq.com>"]
 edition = "2024"
 description = "一个自动修复 PVE 虚拟机 PCI 硬件地址漂移的工具"
 

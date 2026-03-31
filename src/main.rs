@@ -236,6 +236,21 @@ async fn api_save_bind(Json(payload): Json<BindRequest>) -> String {
 async fn main() {
     println!(">>> PvePciFixer 正在启动...");
 
+    let version = env!("CARGO_PKG_VERSION");
+    let authors = env!("CARGO_PKG_AUTHORS");
+
+    println!(r#"
+    ____           ____       _ _____ _
+   |  _ \ __   __ |  _ \ ___ (_)  ___(_)_  _____ _ __
+   | |_) |\ \ / / | |_) / __|| | |_  | \ \/ / _ \ '__|
+   |  __/  \ V /  |  __/ (__ | |  _| | |>  <  __/ |
+   |_|      \_/   |_|   \___||_|_|   |_/_/\_\___|_|
+
+    Version: {}
+    Author:  {}
+    Status:  Running (Environment: Real)
+    "#, version, authors);
+
     // 启动即执行一次修复
     println!("{}", do_fix_logic());
 
