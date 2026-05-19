@@ -46,13 +46,19 @@ struct VMInfo {
 struct BindRequest {
     vmid: u32,
     name_keyword: String,
-    key: String, // 如果为空，后端将自动计算 hostpciN
+    key: String, // 如果为空,后端将自动计算 hostpciN
+}
+
+#[derive(Deserialize)]
+struct UnbindRequest {
+    vmid: u32,
+    key: String, // 要解绑的槽位 key,如 hostpci0
 }
 
 // --- 常量配置 ---
 const CONFIG_YML: &str = "config.yml";
-const DEV_LSPCI_FILE: &str = "lspci.txt";
-const DEV_CONF_DIR: &str = "/home/jeff/fsdownload/qemu-server";
+const DEV_LSPCI_FILE: &str = "dev_files/lspci.txt";
+const DEV_CONF_DIR: &str = "dev_files/qemu-server";
 const PROD_CONF_DIR: &str = "/etc/pve/qemu-server";
 
 // --- PCI 列表获取逻辑 (环境隔离) ---
@@ -227,7 +233,68 @@ async fn api_save_bind(Json(payload): Json<BindRequest>) -> String {
         fs::write(&conf_path, new_conf).unwrap();
     }
 
-    format!("成功绑定至 {}，请点击‘执行修正’同步地址。", final_key)
+    format!("成功绑定至 {},请点击'执行修正'同步地址。", final_key)
+}
+
+async fn api_unbind(Json(payload): Json<UnbindRequest>) -> String {
+    let config_str = match fs::read_to_string(CONFIG_YML) {
+        Ok(s) => s,
+        Err(_) => return "错误：配置文件不存在".into(),
+    };
+
+    let mut config: Config = match serde_yaml::from_str(&config_str) {
+        Ok(c) => c,
+        Err(_) => return "错误：配置文件解析失败".into(),
+    };
+
+    // 查找对应的 VM
+    if let Some(target_idx) = config.targets.iter().position(|t| t.vmid == payload.vmid) {
+        let target = &mut config.targets[target_idx];
+        
+        // 查找并移除对应的 PCI 槽位
+        let slot_idx = target.pci_slots.iter().position(|s| s.key == payload.key);
+        
+        if let Some(idx) = slot_idx {
+            let removed_slot = target.pci_slots.remove(idx);
+            
+            // 如果该 VM 没有其他 PCI 槽位了,移除整个 VM 条目
+            if target.pci_slots.is_empty() {
+                config.targets.remove(target_idx);
+            }
+            
+            // 保存配置
+            if let Err(e) = fs::write(CONFIG_YML, serde_yaml::to_string(&config).unwrap()) {
+                return format!("错误：保存配置文件失败 - {}", e);
+            }
+
+            // 从 VM 的 .conf 文件中删除对应的 hostpciN 行
+            let base_path = if config.mode == "dev" { DEV_CONF_DIR } else { PROD_CONF_DIR };
+            let conf_path = format!("{}/{}.conf", base_path, payload.vmid);
+            if let Ok(content) = fs::read_to_string(&conf_path) {
+                let key_prefix = format!("{}:", removed_slot.key);
+                let new_content: String = content
+                    .lines()
+                    .filter(|line| !line.starts_with(&key_prefix))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                // 保留原文件末尾换行风格
+                let new_content = if content.ends_with('\n') {
+                    format!("{}\n", new_content)
+                } else {
+                    new_content
+                };
+                if let Err(e) = fs::write(&conf_path, new_content) {
+                    return format!("配置已从跟踪列表移除，但写入 VM 配置失败 - {}", e);
+                }
+            }
+
+            format!("成功解绑 VM {} 的 {} ({})", payload.vmid, removed_slot.key, removed_slot.name_keyword)
+        } else {
+            format!("错误：在 VM {} 中未找到槽位 {}", payload.vmid, payload.key)
+        }
+    } else {
+        format!("错误：未找到 VM {} 的绑定配置", payload.vmid)
+    }
 }
 
 // --- 主函数 ---
@@ -255,15 +322,21 @@ async fn main() {
     println!("{}", do_fix_logic());
 
     let app = Router::new()
-        // ✅ 修正：只保留这一个 /api/pci 处理逻辑
+        // ✅ 修正:只保留这一个 /api/pci 处理逻辑
         .route("/api/pci", get(|| async {
             let s = fs::read_to_string(CONFIG_YML).unwrap_or_else(|_| "mode: prod".into());
             let c: Config = serde_yaml::from_str(&s).unwrap_or(Config { mode: "prod".into(), enable_web: true, targets: vec![] });
             Json(get_current_pci_list(&c))
         }))
         .route("/api/vms", get(api_get_vms))
+        .route("/api/config", get(|| async {
+            let s = fs::read_to_string(CONFIG_YML).unwrap_or_else(|_| "mode: prod".into());
+            let c: Config = serde_yaml::from_str(&s).unwrap_or(Config { mode: "prod".into(), enable_web: true, targets: vec![] });
+            Json(c)
+        }))
         .route("/api/fix", get(|| async { do_fix_logic() }))
         .route("/api/save", post(api_save_bind))
+        .route("/api/unbind", post(api_unbind))
         .route("/", get(|| async {
             axum::response::Html(include_str!("index.html"))
         }));

@@ -44,7 +44,19 @@
 </div>
 
 <div class="card">
-    <h3>2. 系统状态与操作</h3>
+    <h3>2. 查看已绑定设备</h3>
+    <p style="font-size: 0.9em; color: #7f8c8d;">查看当前所有绑定关系，并可快速解绑设备。</p>
+    
+    <label>选择虚拟机 (查看其绑定)：</label>
+    <select id="vms_unbind" onchange="loadBindings()">
+        <option value="">-- 请选择 --</option>
+    </select>
+    
+    <div id="bindings_list" style="margin-top: 15px;"></div>
+</div>
+
+<div class="card">
+    <h3>3. 系统状态与操作</h3>
     <button onclick="runFix()" style="background: #3498db;">立即执行全量地址修正</button>
     <h4>实时运行日志：</h4>
     <div id="logs" class="log-area">等待指令下达...</div>
@@ -59,21 +71,31 @@
 </footer>
 
 <script>
+    let configData = null;
+
     async function loadData() {
         try {
-            const [vms, pcis] = await Promise.all([
+            const [vms, pcis, config] = await Promise.all([
                 fetch('/api/vms').then(r => r.json()),
-                fetch('/api/pci').then(r => r.json())
+                fetch('/api/pci').then(r => r.json()),
+                fetch('/api/config').then(r => r.json()).catch(() => null)
             ]);
 
             document.getElementById('vms').innerHTML = vms.map(v =>
                 `<option value="${v.vmid}">${v.vmid} | ${v.name}</option>`).join('');
+            
+            // 同步解绑下拉框
+            document.getElementById('vms_unbind').innerHTML = 
+                `<option value="">-- 请选择 --</option>` +
+                vms.map(v => `<option value="${v.vmid}">${v.vmid} | ${v.name}</option>`).join('');
 
             // p[0] 是地址, p[1] 是设备全名
             document.getElementById('pcis').innerHTML = pcis.map(p =>
                 `<option value="${p[1]}">${p[0]} - ${p[1]}</option>`).join('');
+            
+            configData = config;
         } catch (err) {
-            document.getElementById('logs').innerText = "通信失败：无法连接到 Rust 后端 API";
+            document.getElementById('logs').innerText = "通信失败:无法连接到 Rust 后端 API";
             console.error(err);
         }
     }
@@ -107,6 +129,72 @@
             document.getElementById('logs').innerText = res;
         } catch (err) {
             document.getElementById('logs').innerText = "执行失败：后端服务响应异常";
+        }
+    }
+
+    async function loadBindings() {
+        const vmid = document.getElementById('vms_unbind').value;
+        const container = document.getElementById('bindings_list');
+        
+        if (!vmid) {
+            container.innerHTML = '';
+            return;
+        }
+
+        try {
+            // 如果没有缓存,则获取配置
+            let config = configData;
+            if (!config) {
+                config = await fetch('/api/config').then(r => r.json());
+                configData = config;
+            }
+            
+            const target = config.targets.find(t => t.vmid == vmid);
+            
+            if (!target || target.pci_slots.length === 0) {
+                container.innerHTML = '<p style="color: #7f8c8d; padding: 10px;">该虚拟机暂无绑定设备</p>';
+                return;
+            }
+            
+            let html = '<div style="border: 1px solid #dfe6e9; border-radius: 4px; overflow: hidden;">';
+            target.pci_slots.forEach((slot, index) => {
+                html += `
+                    <div style="padding: 12px; background: ${index % 2 === 0 ? '#f8f9fa' : 'white'}; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #dfe6e9;">
+                        <div>
+                            <strong style="color: #2ecc71;">${slot.key}</strong>
+                            <span style="color: #636e72; margin-left: 10px; font-size: 0.9em;">${slot.name_keyword}</span>
+                        </div>
+                        <button onclick="unbindDevice(${vmid}, '${slot.key}')" 
+                                style="width: auto; padding: 6px 12px; background: #e74c3c; margin: 0; font-size: 0.85em;">
+                            解绑
+                        </button>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            container.innerHTML = html;
+        } catch (err) {
+            container.innerHTML = '<p style="color: #e74c3c;">加载绑定信息失败</p>';
+        }
+    }
+
+    async function unbindDevice(vmid, key) {
+        if (!confirm(`确定要解绑 VM ${vmid} 的 ${key} 吗？`)) {
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/unbind', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ vmid, key })
+            }).then(r => r.text());
+
+            document.getElementById('logs').innerText = res;
+            configData = null; // 强制重新获取最新配置
+            loadBindings(); // 刷新绑定列表
+        } catch (err) {
+            alert("解绑失败，请检查网络");
         }
     }
 
